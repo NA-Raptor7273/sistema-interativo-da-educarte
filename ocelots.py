@@ -1,102 +1,98 @@
 import streamlit as st
-import sqlite3
-import hashlib
+from streamlit_option_menu import option_menu
+import sqlite3 as sq
+from datetime import datetime
 
-# ========================
-# Funções auxiliares
-# ========================
-def conectar_bd():
-    return sqlite3.connect("usuarios.db")
+if 'page' not in st.session_state:
+    st.session_state.page = 'login'
 
-def criar_tabela():
-    conn = conectar_bd()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-    conn.close()
+con = sq.connect('ocelots.db')
+cursor = con.cursor()
 
-def hash_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
+#------TABELAS------
 
-def verificar_usuario(username, password):
-    senha_hash = hash_senha(password)
-    conn = conectar_bd()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM usuarios WHERE username=? AND password=?", (username, senha_hash))
-    resultado = cursor.fetchone()
-    conn.close()
-    return resultado
+adm = '''
+CREATE TABLE IF NOT EXISTS adm (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario TEXT NOT NULL,
+    senha TEXT NOT NULL
+)
+'''
 
-def criar_usuario(username, password):
-    senha_hash = hash_senha(password)
-    conn = conectar_bd()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO usuarios (username, password) VALUES (?, ?)", (username, senha_hash))
-        conn.commit()
-        sucesso = True
-    except sqlite3.IntegrityError:
-        sucesso = False  # Usuário já existe
-    conn.close()
-    return sucesso
+cursor.execute(adm)
 
-# ========================
-# Interface do Streamlit
-# ========================
-st.set_page_config(page_title="Login App", page_icon="🔐")
+con.commit()
 
-# Cria a tabela no banco de dados, se ainda não existir
-criar_tabela()
+#-----TELA SING-UP-----
 
-# Estado de navegação
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 'login'
-if 'usuario_logado' not in st.session_state:
-    st.session_state.usuario_logado = None
-
-# ========== TELA DE LOGIN ==========
-if st.session_state.pagina == 'login':
-    st.title("🔐 Login")
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-
-    if st.button("Entrar"):
-        if verificar_usuario(usuario, senha):
-            st.success("Login bem-sucedido!")
-            st.session_state.usuario_logado = usuario
-            st.session_state.pagina = 'app'
+def sign_up():
+    st.title('SING-UP')
+    with st.form('adm_cad'):
+        usuario = st.text_input('Crie um nome de usuário:')
+        senha = st.text_input('Crie uma senha:', type='password')
+        senha_conf = st.text_input('Confirme a senha:', type='password')
+        submit = st.form_submit_button('SignUp')
+        login = st.button('LogIn')
+        if submit and usuario and senha and senha_conf and senha == senha_conf:
+            verificacao = cursor.execute('SELECT * FROM adm WHERE usuario = ?', (usuario))
+            if verificacao:
+                st.error(f'Usuário {usuario} já cadastrado! Faça log-in.')
+            else:
+                cursor.execute('INSERT INTO adm (usuario, senha) VALUES (?, ?)', (usuario, senha))
+                st.success(f'Cadastro realizado com sucesso {usuario}! Seja bem-vindo ao SIO: Sistema Interativo Ocelots!')
+        elif submit and usuario and senha and senha_conf:
+            st.error('As senhas não coincidem!')
         else:
-            st.warning("Usuário ou senha incorretos.")
-            if st.button("Ir para Cadastro"):
-                st.session_state.pagina = 'cadastro'
+            st.error('Por favor, preencha todos os campos!')
+        
+        if login:
+            st.session_state.page = 'login'
 
-# ========== TELA DE CADASTRO ==========
-elif st.session_state.pagina == 'cadastro':
-    st.title("📝 Cadastro")
-    novo_usuario = st.text_input("Novo Usuário")
-    nova_senha = st.text_input("Nova Senha", type="password")
+#-----TELA LOG-IN-----
 
-    if st.button("Cadastrar"):
-        if criar_usuario(novo_usuario, nova_senha):
-            st.success("Cadastro realizado com sucesso! Faça login.")
-            st.session_state.pagina = 'login'
+def log_in():
+    st.title('LOG-IN')
+    with st.form('adm_log'):
+        usuario = st.text_input('Usuário:')
+        senha = st.text_input('Digite a Senha:', type='password')
+        submit = st.form_submit_button('Log-in')
+        signup = st.button('Sign-Up')
+        if submit and usuario and senha:
+            verificacao = cursor.execute('SELECT * FROM adm WHERE usuario = ?', (usuario))
+            if verificacao:
+                st.session_state.page = 'start'
+            else:
+                st.error('Usuário ou senha incorreto!')
         else:
-            st.error("Usuário já existe. Tente outro nome.")
+            st.error('Por favor, preencha todos os campos!')
+        if signup:
+            st.session_state.page = 'signup'
 
-    if st.button("Voltar para Login"):
-        st.session_state.pagina = 'login'
+#-----TELA INÍCIO-----
 
-# ========== APLICATIVO PRINCIPAL ==========
-elif st.session_state.pagina == 'app':
-    st.title("📱 Meu Aplicativo")
-    st.success(f"Bem-vindo, {st.session_state.usuario_logado}!")
-    st.write("✅ Aqui está o conteúdo principal do seu app...")
+def start():
+    st.title('SIO: Sistema Interativo Ocelots')
+    menu = st.sidebar('Menu', ['Início', 'Gerenciar', 'Painel de Controle', 'Sair'])
+    if menu == 'Início':
+        st.session_state.page = 'start'
+    elif menu == 'Gerenciar':
+        submenu = st.sidebar.radio('Gerenciar', ['Gerenciar Pagamentos', 'Gerenciar Frequências'])
+        if submenu == 'Gerenciar Pagamentos':
+            st.title('SIO: Sistema Interativo Ocelots')
+            st.text('Gerenciar Pagamentos')
+        elif submenu == 'Gerenciar Frequências':
+            st.title('SIO: Sistema Interativo Ocelots')
+            st.text('Gerenciar Frequências')
+    elif menu == 'Painel de Controle':
+        st.title('SIO: Sistema Interativo Ocelots')
+    elif menu == 'Sair':
+        st.session_state.page = 'login'
 
-    if st.button("Sair"):
-        st.session_state.pagina = 'login'
-        st.session_state.usuario_logado = None
+#-----MULTIAPP-----
+
+if st.session_state.page == 'start':
+    start()
+elif st.session_state.page == 'login':
+    log_in()
+elif st.session_state.page == 'signup':
+    sign_up()
